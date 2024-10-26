@@ -1,13 +1,10 @@
-import Vue from 'vue';
-import Vuex from 'vuex';
-import axios from 'axios';
+import { createStore } from "vuex";
+import apiClient from "../api";
 
-Vue.use(Vuex);
-
-export default new Vuex.Store({
+const store = createStore({
   state: {
     user: null,
-    token: localStorage.getItem('token') || ''
+    token: localStorage.getItem("token") || "",
   },
   mutations: {
     setUser(state, user) {
@@ -15,36 +12,57 @@ export default new Vuex.Store({
     },
     setToken(state, token) {
       state.token = token;
-      localStorage.setItem('token', token);
+      localStorage.setItem("token", token);
     },
-    logout(state) {
+    clearAuth(state) {
       state.user = null;
-      state.token = '';
-      localStorage.removeItem('token');
-    }
+      state.token = "";
+      localStorage.removeItem("token");
+    },
   },
   actions: {
     async login({ commit }, credentials) {
       try {
-        const response = await axios.post('localhost:3000', credentials);
-        const token = response.data.token;
+        const response = await apiClient.post("/login", credentials);
+        const token = response.data.jwt;
         const user = response.data.user;
-        
-        commit('setToken', token);
-        commit('setUser', user);
-        
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+        commit("setToken", token);
+        commit("setUser", user);
       } catch (error) {
-        throw new Error('Erro de login');
+        const message = error.response?.data?.error || "Erro ao realizar login";
+        throw new Error(message);
       }
     },
-    logout({ commit }) {
-      commit('logout');
-      delete axios.defaults.headers.common['Authorization'];
-    }
+    async logout({ commit }) {
+      try {
+        const response = await apiClient.delete("/logout", {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
+        return response;
+      } catch (error) {
+        console.error("Erro ao realizar logout:", error);
+        throw error;
+      } finally {
+        localStorage.removeItem("token");
+        commit("clearAuth");
+      }
+    },
+    async fetchUser({ commit }) {
+      try {
+        const response = await apiClient.get("/me");
+        commit("setUser", response.data);
+      } catch (error) {
+        commit("clearAuth");
+      }
+    },
   },
   getters: {
-    isAuthenticated: state => !!state.token,
-    user: state => state.user
-  }
+    isAuthenticated: (state) => !!state.token,
+    user: (state) => state.user,
+  },
 });
+
+export default store;
